@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GenApp DocMaster Pro</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+    <div class="sidebar">
+        <!-- HEADER -->
+        <div class="sidebar-header">
+            <h2>DocMaster Pro 1.1</h2>
+            <div style="display: flex; gap: 5px; margin-top: 10px;">
+                <button class="btn-primary" style="background: #28a745; margin:0;" onclick="saveProject()">💾 Save</button>
+                <button class="btn-primary" style="background: #17a2b8; margin:0;" onclick="loadProject()">📂 Open</button>
+            </div>
+        </div>
+        
+        <!-- CONTENT -->
+        <div class="sidebar-content">
+            <div class="section-title">1. Источники</div>
+            
+            <!-- Переключатель режима -->
+            <div class="source-switch" style="display: flex; background: #e9ecef; border-radius: 4px; padding: 2px; margin-bottom: 5px;">
+                <div id="modeSingle" class="switch-opt active" onclick="setSourceMode('single')">Один файл</div>
+                <div id="modeFolder" class="switch-opt" onclick="setSourceMode('folder')">Папка</div>
+            </div>
+
+            <!-- Кнопка теперь одна, но делает разное -->
+            <button class="btn-primary" id="btnSelectBg" onclick="selectBackground()">📄 Выбрать файл</button>
+            <div id="imgName" class="file-status">Нет файла</div>
+
+            <button class="btn-primary" onclick="selectExcel()">📊 Данные (Excel)</button>
+            <div id="xlsName" class="file-status">Нет файла</div>
+
+            <hr>
+            <div class="section-title">2. Глобальный стиль</div>
+
+            <div class="control-group">
+                <label>Шрифт документа:</label>
+                <div style="display: flex; gap: 5px;">
+                    <select id="globalFont" onchange="updateGlobals()" style="flex-grow: 1;">
+                        <option value="random_per_doc">🎲 Случайный (Один на док)</option>
+                        <option value="random">🎲 Случайный (Разные поля)</option>
+                    </select>
+                    <!-- КНОПКА НАСТРОЙКИ -->
+                    <button class="btn-primary" style="width: 35px; padding: 0; margin: 0; background: #6c757d;" onclick="openFontManager()" title="Настроить частоту шрифтов">⚙️</button>
+                </div>
+            </div>
+
+            <!-- НОВЫЙ СЛАЙДЕР РАЗМЕРА -->
+            <div class="dual-slider-container" id="grp-size">
+                <div class="slider-header">
+                    <span>Размер шрифта</span>
+                    <span class="range-values" id="disp-size">18 - 24</span>
+                </div>
+                <div class="slider-track-bg"></div>
+                <div class="slider-track-fill" id="fill-size"></div>
+                <!-- Диапазон от 10 до 100, шаг 1 -->
+                <input type="range" class="dual-range" id="sizeMin" min="10" max="100" step="1" value="18" oninput="dualSlide('size')">
+                <input type="range" class="dual-range" id="sizeMax" min="10" max="100" step="1" value="24" oninput="dualSlide('size')">
+            </div>
+
+            <div class="control-group">
+                <label>Цвет чернил:</label>
+                <input type="color" id="globalColor" value="#1414A0" style="width: 100%; height: 30px;" oninput="updateGlobals()">
+            </div>
+            <details open>
+                <summary>✍️ Физика (Диапазоны)</summary>
+                <div class="details-content">
+                    
+                    <!-- === КРИВИЗНА (0 - 10) === -->
+                    <div class="dual-slider-container" id="grp-shake">
+                        <div class="slider-header">
+                            <span>Кривизна</span>
+                            <span class="range-values" id="disp-shake">2.0 - 3.0</span>
+                        </div>
+                        <!-- Фон и заливка -->
+                        <div class="slider-track-bg"></div>
+                        <div class="slider-track-fill" id="fill-shake"></div>
+                        <!-- Два инпута: Min и Max -->
+                        <input type="range" class="dual-range" id="shakeMin" min="0" max="10" step="0.1" value="2" oninput="dualSlide('shake')">
+                        <input type="range" class="dual-range" id="shakeMax" min="0" max="10" step="0.1" value="3" oninput="dualSlide('shake')">
+                    </div>
+
+                    <!-- === НАЖИМ (0 - 10) === -->
+                    <div class="dual-slider-container" id="grp-ink">
+                        <div class="slider-header">
+                            <span>Нажим</span>
+                            <span class="range-values" id="disp-ink">4.0 - 6.0</span>
+                        </div>
+                        <div class="slider-track-bg"></div>
+                        <div class="slider-track-fill" id="fill-ink"></div>
+                        <input type="range" class="dual-range" id="inkMin" min="0" max="10" step="0.5" value="4" oninput="dualSlide('ink')">
+                        <input type="range" class="dual-range" id="inkMax" min="0" max="10" step="0.5" value="6" oninput="dualSlide('ink')">
+                    </div>
+
+                    <!-- === РАЗМЫТИЕ (0 - 2) === -->
+                    <div class="dual-slider-container" id="grp-blur">
+                        <div class="slider-header">
+                            <span>Размытие</span>
+                            <span class="range-values" id="disp-blur">0.0 - 0.5</span>
+                        </div>
+                        <div class="slider-track-bg"></div>
+                        <div class="slider-track-fill" id="fill-blur"></div>
+                        <input type="range" class="dual-range" id="blurMin" min="0" max="3" step="0.1" value="0" oninput="dualSlide('blur')">
+                        <input type="range" class="dual-range" id="blurMax" min="0" max="3" step="0.1" value="0.5" oninput="dualSlide('blur')">
+                    </div>
+                    <div class="dual-slider-container" id="grp-cvar">
+                        <div class="slider-header">
+                            <span>Оттенок (Разброс)</span>
+                            <span class="range-values" id="disp-cvar">0 - 20</span>
+                        </div>
+                        <div class="slider-track-bg"></div>
+                        <div class="slider-track-fill" id="fill-cvar"></div>
+                        <!-- Диапазон сдвига каналов RGB (0 - 100) -->
+                        <input type="range" class="dual-range" id="cvarMin" min="0" max="100" step="1" value="0" oninput="dualSlide('cvar')">
+                        <input type="range" class="dual-range" id="cvarMax" min="0" max="100" step="1" value="20" oninput="dualSlide('cvar')">
+                    </div>
+                    <!-- === НАКЛОН (-5 - 5) === -->
+                    <div class="dual-slider-container" id="grp-slant">
+                        <div class="slider-header">
+                            <span>Наклон</span>
+                            <span class="range-values" id="disp-slant">-0.5 - 0.5</span>
+                        </div>
+                        <div class="slider-track-bg"></div>
+                        <div class="slider-track-fill" id="fill-slant"></div>
+                        <input type="range" class="dual-range" id="slantMin" min="-5" max="5" step="0.1" value="-0.5" oninput="dualSlide('slant')">
+                        <input type="range" class="dual-range" id="slantMax" min="-5" max="5" step="0.1" value="0.5" oninput="dualSlide('slant')">
+                    </div>
+
+                    <!-- === РАЗБРОС (0 - 20) === -->
+                    <div class="dual-slider-container" id="grp-kern">
+                        <div class="slider-header">
+                            <span>Кернинг</span>
+                            <span class="range-values" id="disp-kern">1 - 3</span>
+                        </div>
+                        <div class="slider-track-bg"></div>
+                        <div class="slider-track-fill" id="fill-kern"></div>
+                        <input type="range" class="dual-range" id="kernMin" min="0" max="20" step="1" value="1" oninput="dualSlide('kern')">
+                        <input type="range" class="dual-range" id="kernMax" min="0" max="20" step="1" value="3" oninput="dualSlide('kern')">
+                    </div>
+
+                </div>
+            </details>
+        </div>
+
+        <!-- FOOTER -->
+        <div class="sidebar-footer">
+            <div class="zoom-controls">
+                <small>Колесико = Зум<br>Ср. кнопка / Пробел = Панорама</small>
+                <button onclick="resetZoom()">Сброс вида</button>
+            </div>
+            <hr>
+            <button class="btn-primary" style="background: #6c757d" onclick="showPreview()">👁 Предпросмотр</button>
+            <div style="display: flex; gap: 5px;">
+                <button class="btn-primary" id="genBtn" onclick="startGen()" disabled>🚀 Пуск</button>
+                <button class="btn-primary" style="background: #dc3545; width: 40px;" onclick="stopGen()">⏹</button>
+            </div>
+            
+            <div id="progressInfo" style="display: none; margin-top: 10px;">
+                <progress id="progressBar" value="0" max="100" style="width:100%"></progress>
+                <div id="progVal" style="font-size: 11px; text-align: center;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- WORKSPACE С НОВОЙ СТРУКТУРОЙ ДЛЯ ЗУМА -->
+    <div class="workspace" id="workspace">
+        <div id="panContainer">
+            <div class="canvas-wrapper" id="canvasWrapper">
+                <img id="docImage" src="">
+                
+                <!-- Меню привязано к canvasWrapper, чтобы масштабироваться вместе с ним или позиционироваться относительно него -->
+                <div id="floatingToolbar">
+                    <div class="toolbar-row">
+                        <select id="localColumn" title="Колонка Excel"></select>
+                        
+                        <!-- Кнопка Дублировать -->
+                        <button class="btn-icon" onclick="duplicateActiveZone()" title="Дублировать (Ctrl+D)" style="background: #eef; color: #333;">❐</button>
+                        
+                        <!-- Кнопка Удалить -->
+                        <button class="btn-icon delete" onclick="deleteActiveZone()" title="Удалить (Delete)">🗑</button>
+                    </div>
+                    
+                    <div class="toolbar-row advanced">
+                        <label><input type="checkbox" id="localOverride"> Свой стиль</label>
+                    </div>
+                    
+                    <div id="localSettings" style="display: none; margin-top: 5px;">
+                        <select id="localFont" style="width: 100%; margin-bottom: 3px;"></select>
+                        <input type="number" id="localSize" placeholder="Размер" style="width: 60px;">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PREVIEW MODAL -->
+    <div class="modal" id="previewModal">
+        <img id="previewImg">
+        <button class="modal-close" onclick="closePreview()">Закрыть</button>
+    </div>
+
+    <div class="modal" id="fontManagerModal">
+        <div class="modal-content-window">
+            <h3>Настройка частоты шрифтов</h3>
+            <p style="font-size: 11px; color: #666; margin-bottom: 10px;">
+                0 = Выключен. 10 = Максимально часто.
+            </p>
+            
+            <div id="fontListContainer">
+                <!-- Сюда JS нарисует список шрифтов -->
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-top: 15px; justify-content: flex-end;">
+                <button class="btn-primary" style="width: auto; background: #6c757d;" onclick="closeFontManager()">Отмена</button>
+                <button class="btn-primary" style="width: auto; background: #28a745;" onclick="saveFontConfig()">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,245 @@
+body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; background: #333; display: flex; height: 100vh; overflow: hidden; user-select: none; }
+
+/* SIDEBAR */
+.sidebar { width: 300px; background: white; border-right: 1px solid #ccc; display: flex; flex-direction: column; z-index: 2000; }
+.sidebar-header, .sidebar-footer { padding: 15px; background: #f8f9fa; border-bottom: 1px solid #eee; }
+.sidebar-content { flex-grow: 1; overflow-y: auto; padding: 15px; }
+.section-title { font-size: 12px; font-weight: bold; color: #888; margin-bottom: 8px; text-transform: uppercase; }
+.file-status { font-size: 11px; color: #666; margin-bottom: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* CONTROLS */
+.control-group { margin-bottom: 12px; }
+.control-group label { display: block; font-size: 12px; margin-bottom: 4px; color: #444; }
+select, input[type=text], input[type=number], input[type=color] { width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+
+/* BUTTONS */
+button { padding: 8px; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 13px; }
+.btn-primary { background: #007bff; color: white; width: 100%; margin-bottom: 5px; }
+.btn-primary:disabled { background: #ccc; cursor: not-allowed; }
+.zoom-controls { font-size: 11px; color: #666; margin-bottom: 10px; text-align: center; }
+
+/* === DUAL SLIDERS (ИСПРАВЛЕНО) === */
+.dual-slider-container {
+    position: relative;
+    width: 100%;
+    height: 45px;
+    margin-bottom: 10px;
+}
+.slider-header {
+    display: flex; justify-content: space-between; 
+    font-size: 11px; font-weight: 600; color: #444; margin-bottom: 5px;
+}
+.range-values { color: #2196f3; }
+
+/* Треки (линии) */
+.slider-track-bg {
+    position: absolute; 
+    z-index: 1; 
+    top: 28px; /* Центрируем под ручками */
+    left: 0; 
+    width: 100%; 
+    height: 4px; 
+    background-color: #e0e0e0; 
+    border-radius: 2px;
+}
+
+.slider-track-fill {
+    position: absolute; 
+    z-index: 2; 
+    top: 28px; 
+    height: 4px; 
+    background-color: #2196f3; 
+    border-radius: 2px; 
+    pointer-events: none;
+}
+/* Сами инпуты - ВАЖНО: pointer-events: none, чтобы пропускать клики */
+input[type="range"].dual-range {
+    position: absolute;
+    top: 18px; /* Выравниваем, чтобы ручка была по центру трека */
+    left: 0;
+    width: 100%;
+    height: 20px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: none; /* УБИРАЕМ СТАНДАРТНЫЙ ФОН */
+    pointer-events: none; /* Пропускаем клики сквозь пустоту */
+    margin: 0;
+    padding: 0;
+    z-index: 3;
+}
+
+/* Бегунок - ВАЖНО: pointer-events: auto, чтобы его можно было схватить */
+input[type="range"].dual-range::-webkit-slider-thumb {
+    pointer-events: auto; /* Включаем клики на ручке */
+    -webkit-appearance: none;
+    width: 18px; 
+    height: 18px;
+    background: white;
+    border: 2px solid #2196f3;
+    border-radius: 50%;
+    cursor: grab;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+    margin-top: 0; /* Webkit quirk */
+}
+input[type="range"].dual-range::-webkit-slider-thumb:active { cursor: grabbing; background: #eef; }
+
+input[type="range"].dual-range::-moz-range-thumb {
+    pointer-events: auto;
+    width: 18px; height: 18px;
+    background: white;
+    border: 2px solid #2196f3;
+    border-radius: 50%;
+    cursor: grab;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+
+/* === WORKSPACE (ZOOM/PAN) === */
+.workspace { 
+    flex-grow: 1; 
+    background: #555; 
+    position: relative; 
+    overflow: hidden; 
+    cursor: default; /* По умолчанию стрелка */
+}
+/* Контейнер трансформации */
+#panContainer {
+    transform-origin: 0 0;
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    /* Важно: контейнер не должен блокировать мышь, если кликаем мимо картинки */
+    pointer-events: none; 
+}
+/* Сама обертка с картинкой */
+.canvas-wrapper { 
+    position: absolute; 
+    background: white; 
+    box-shadow: 0 0 50px rgba(0,0,0,0.5); 
+    line-height: 0; 
+    transform-origin: 0 0;
+    pointer-events: auto; /* Включаем события обратно для картинки */
+}
+#docImage { display: block; pointer-events: none; user-select: none; }
+
+/* ZONES */
+.zone { 
+    /* Толщина рамки тоже должна расти, чтобы её было видно */
+    border-width: calc(2px * var(--ui-scale, 1)) !important; 
+    /* Остальное старое... */
+    position: absolute; 
+    border: 2px dashed #ff9800; 
+    background: rgba(255, 152, 0, 0.2); 
+    cursor: move; 
+    box-sizing: border-box; 
+    user-select: none;
+}
+.zone:hover { background: rgba(255, 152, 0, 0.3); }
+.zone.selected { 
+    border-width: calc(2px * var(--ui-scale, 1)) !important;
+    border-style: solid !important;
+    border: 2px solid #2196f3; 
+    background: rgba(33, 150, 243, 0.15); 
+    z-index: 100; 
+}
+
+.resize-handle { 
+    /* Увеличиваем размер ручек */
+    width: calc(12px * var(--ui-scale, 1)); 
+    height: calc(12px * var(--ui-scale, 1)); 
+    border-width: calc(1px * var(--ui-scale, 1));
+    /* Сдвигаем их, чтобы они оставались скраю */
+    right: calc(-6px * var(--ui-scale, 1)); 
+    bottom: calc(-6px * var(--ui-scale, 1)); 
+    
+    background: #2196f3; border: 1px solid white; position: absolute; cursor: nwse-resize; display: none; 
+}
+.zone.selected .resize-handle { display: block; }
+
+.zone-label {
+    /* Самое главное: шрифт! */
+    font-size: calc(14px * var(--ui-scale, 1)); 
+    
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center; text-align: center;
+    padding: 2px; overflow: hidden; pointer-events: none;
+    color: rgba(0,0,0,0.6); font-weight: bold;
+    white-space: pre-wrap; line-height: 1.1; 
+    /* Тень тоже масштабируем, чтобы она была видна */
+    text-shadow: 0 0 calc(2px * var(--ui-scale, 1)) rgba(255,255,255,0.8);
+}
+
+/* TOOLBAR */
+#floatingToolbar {
+    /* Масштабируем всё меню целиком */
+    transform: scale(var(--ui-scale, 1));
+    transform-origin: top left; /* Растем от левого верхнего угла */
+    
+    position: absolute; background: white; padding: 8px; border-radius: 6px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3); border: 1px solid #ddd; z-index: 999; display: none; width: 230px;
+}
+.toolbar-row { display: flex; gap: 5px; align-items: center; margin-bottom: 5px; }
+.toolbar-row.advanced { font-size: 11px; color: #666; margin-bottom: 0; }
+.btn-icon { width: 30px; height: 30px; padding: 0; display: flex; align-items: center; justify-content: center; background: #f8f9fa; border: 1px solid #ddd; }
+.btn-icon.delete { color: red; background: #fff5f5; border-color: #ffcccc; }
+
+/* MODAL */
+.modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 3000; display: none; justify-content: center; align-items: center; flex-direction: column; }
+.modal img { max-height: 85vh; border: 2px solid white; box-shadow: 0 0 30px black; }
+.modal-close { margin-top: 15px; padding: 8px 20px; background: white; }
+
+/* style.css */
+.switch-opt {
+    flex: 1;
+    text-align: center;
+    padding: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    border-radius: 3px;
+    color: #666;
+    transition: 0.2s;
+}
+.switch-opt.active {
+    background: white;
+    font-weight: bold;
+    color: #007bff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+/* Добавь в конец */
+
+.modal-content-window {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    width: 400px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+.modal-content-window h3 { margin-top: 0; margin-bottom: 5px; }
+
+#fontListContainer {
+    flex-grow: 1;
+    overflow-y: auto;
+    border: 1px solid #eee;
+    padding: 5px;
+    max-height: 50vh;
+}
+
+.font-row {
+    display: flex;
+    align-items: center;
+    padding: 5px;
+    border-bottom: 1px solid #f0f0f0;
+}
+.font-row:last-child { border-bottom: none; }
+.font-row label {
+    flex-grow: 1;
+    font-size: 13px;
+    margin-left: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.font-weight-inp {
+    width: 50px;
+}
