@@ -86,15 +86,16 @@
                     </div>
 
                     <!-- === НАЖИМ (0 - 10) === -->
-                    <div class="dual-slider-container" id="grp-ink">
+                    <div class="dual-slider-container" id="grp-opacity">
                         <div class="slider-header">
-                            <span>Нажим</span>
-                            <span class="range-values" id="disp-ink">4.0 - 6.0</span>
+                            <span>Плотность</span>
+                            <span class="range-values" id="disp-opacity">7.0 - 9.0</span>
                         </div>
                         <div class="slider-track-bg"></div>
-                        <div class="slider-track-fill" id="fill-ink"></div>
-                        <input type="range" class="dual-range" id="inkMin" min="0" max="10" step="0.5" value="4" oninput="dualSlide('ink')">
-                        <input type="range" class="dual-range" id="inkMax" min="0" max="10" step="0.5" value="6" oninput="dualSlide('ink')">
+                        <div class="slider-track-fill" id="fill-opacity"></div>
+                        <!-- Диапазон 0-10 -->
+                        <input type="range" class="dual-range" id="opacityMin" min="0" max="10" step="0.5" value="7" oninput="dualSlide('opacity')">
+                        <input type="range" class="dual-range" id="opacityMax" min="0" max="10" step="0.5" value="9" oninput="dualSlide('opacity')">
                     </div>
 
                     <!-- === РАЗМЫТИЕ (0 - 2) === -->

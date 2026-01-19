@@ -130,6 +130,9 @@ input[type="range"].dual-range::-moz-range-thumb {
     cursor: move; 
     box-sizing: border-box; 
     user-select: none;
+        /* Высота зоны должна быть кратна высоте строки тетради */
+    background-size: 100% calc(40px * var(--ui-scale)); 
+    background-image: linear-gradient(0deg, transparent 95%, rgba(0,0,255,0.1) 5%);
 }
 .zone:hover { background: rgba(255, 152, 0, 0.3); }
 .zone.selected { 

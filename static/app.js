@@ -29,7 +29,7 @@ let globalSettings = {
     // Добавили cvar
     color_var: {min: 0, max: 20}, 
     shakiness: {min: 2, max: 3},
-    ink: {min: 4, max: 6},
+    opacity: {min: 7, max: 9},
     blur: {min: 0, max: 0.5},
     slant: {min: -0.5, max: 0.5},
     kerning: {min: 1, max: 3}
@@ -189,7 +189,7 @@ const inpLocalSize = document.getElementById('localSize');
 // === INIT ===
 window.addEventListener('pywebviewready', () => {
     // Добавь 'cvar' в список
-    ['size', 'cvar', 'shake', 'ink', 'blur', 'slant', 'kern'].forEach(id => dualSlide(id, true));
+    ['size', 'cvar', 'shake', 'opacity', 'blur', 'slant', 'kern'].forEach(id => dualSlide(id, true));
     
     setTimeout(() => {
         window.pywebview.api.get_fonts_list().then(f => {
@@ -504,7 +504,7 @@ function updateGlobals() {
     // 2. Двойные слайдеры (читаем через getRangeValues)
     globalSettings.size = getRangeValues('size');
     globalSettings.shakiness = getRangeValues('shake');
-    globalSettings.ink = getRangeValues('ink');
+    globalSettings.opacity = getRangeValues('opacity');
     globalSettings.blur = getRangeValues('blur');
     globalSettings.slant = getRangeValues('slant');
     globalSettings.kerning = getRangeValues('kern');
@@ -692,7 +692,14 @@ function loadProject() {
             // В. Применяем ко всем слайдерам
             setDual('size', g.size);
             setDual('shake', g.shakiness);
-            setDual('ink', g.ink);
+
+            if (g.opacity) {
+                setDual('opacity', g.opacity);
+            } else {
+                // Если открываем старый проект, ставим дефолтную плотность
+                setDual('opacity', {min: 7, max: 9});
+            }
+            
             setDual('blur', g.blur);
             setDual('slant', g.slant);
             setDual('kern', g.kerning);
