@@ -1,10 +1,11 @@
 import os
 import random
 import json
+import hashlib
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
-from core.utils import wrap_text, vary_color, resource_path
+from core.utils import wrap_text, vary_color, resource_path, get_external_path
 
-FONTS_FOLDER = resource_path("fonts")
+FONTS_FOLDER = get_external_path("fonts")
 OUTPUT_FOLDER = "output"
 
 class Generator:
@@ -163,7 +164,31 @@ class Generator:
             self._draw_line(img, line, font_pool, max_size, x_start, curr_y, phys, color)
             curr_y += line_height
 
-    def process(self, img_path, df_row, config_json):
+
+    def _set_seed(self, row, index, global_seed):
+        # 1. Ищем ID в Excel
+        id_val = None
+        if isinstance(row, dict): # Защита
+            for k in row.keys():
+                if str(k).strip().lower() == 'id':
+                    id_val = row[k]
+                    break
+        
+        # 2. Формируем строку для хеша
+        # Комбинируем: "ЗНАЧЕНИЕ_ID" + "_" + "КЛЮЧ_ПРОЕКТА"
+        # Если изменим Ключ Проекта, хеш полностью изменится
+        if id_val is not None and str(id_val).strip() != "":
+            seed_str = f"{id_val}_{global_seed}"
+        else:
+            seed_str = f"row_{index}_{global_seed}"
+            
+        hash_obj = hashlib.md5(seed_str.encode('utf-8'))
+        seed_int = int(hash_obj.hexdigest(), 16) % (2**32)
+        random.seed(seed_int)
+
+
+    # Обновили сигнатуру: добавили row_index=0
+    def process(self, img_path, df_row, config_json, row_index=0):
         try: 
             base_img = Image.open(img_path).convert("RGBA")
             txt_layer = Image.new('RGBA', base_img.size, (255,255,255,0))
@@ -172,25 +197,34 @@ class Generator:
         cfg = json.loads(config_json)
         glo = cfg['globals']
         zones = cfg['zones']
+        
+        # Получаем ключ проекта (seed), если нет - 'default'
+        project_seed = glo.get('seed', 'default')
+
+        # === УСТАНАВЛИВАЕМ SEED С УЧЕТОМ КЛЮЧА ===
+        self._set_seed(df_row, row_index, project_seed)
+        # ==========================================
+        
         avail = self.get_fonts()
         if not avail: return base_img
 
         fonts_cfg = glo.get('fonts_config', {})
         
-        # --- ИСПРАВЛЕНИЕ ОШИБКИ ИНИЦИАЛИЗАЦИИ ---
+        # Теперь все random.choice и random.uniform ниже будут давать 
+        # ОДИНАКОВЫЙ результат для одного и того же seed_str
+
         doc_font_name = None 
-        # Подготавливаем активный пул шрифтов (где вес > 0)
         active_pool = [f for f, w in fonts_cfg.items() if w > 0]
         if not active_pool: active_pool = [avail[0]]
 
-        # Глобальный выбор для режима "Один шрифт на документ"
         if glo['font'] == 'random_per_doc':
             doc_font_name = self._pick_weighted_font(avail, fonts_cfg)
         elif glo['font'] != 'random' and glo['font'] in avail:
             doc_font_name = glo['font']
 
-        # Параметры документа
+        # Параметры документа (теперь они жестко привязаны к ID)
         doc_base_size = int(self._get_val(glo.get('size', 20)))
+        
         doc_phys = {
             'shakiness': self._get_val(glo.get('shakiness', 0)),
             'opacity':   self._get_val(glo.get('opacity', 8)),
@@ -199,7 +233,6 @@ class Generator:
             'blur':      self._get_val(glo.get('blur', 0))
         }
 
-        # Цвет
         base_rgb = self._hex_to_rgb(glo['color'])
         c_var = int(self._get_val(glo.get('color_var', 0)))
         r, g, b = base_rgb
@@ -209,38 +242,50 @@ class Generator:
         doc_color = (r, g, b)
 
         for z in zones:
-            # Локальный пул для зоны
             zone_font_pool = []
-            
-            # Если в зоне выбран конкретный шрифт (не "Global")
             if z.get('font') and z['font'] in avail:
                 zone_font_pool = [z['font']]
             else:
-                # Используем глобальную настройку
                 if glo['font'] == 'random':
-                    zone_font_pool = active_pool # Рисуем буква за буквой из всего пула
+                    zone_font_pool = active_pool 
                 elif glo['font'] == 'random_per_doc':
                     zone_font_pool = [doc_font_name] if doc_font_name else [active_pool[0]]
                 else:
-                    # Выбран конкретный шрифт в глобальных
                     main_f = glo['font'] if glo['font'] in avail else avail[0]
                     zone_font_pool = [main_f]
             
             size = z['size'] if z['size'] else doc_base_size
-            txt = str(df_row.get(z['column'], ""))
+            
+            source_type = z.get('sourceType', 'excel') # excel по умолчанию
+            content_key = z.get('content', '')
+            
+            txt = ""
+            if source_type == 'text':
+                # Если режим текста - берем текст напрямую
+                txt = str(content_key)
+            else:
+                # Если режим Excel - ищем в строке
+                txt = str(df_row.get(content_key, ""))
+            
             if not txt: continue
-
+            
             self._fit_and_draw(txt_layer, txt, zone_font_pool, size, z, doc_phys, doc_color)
 
         out = Image.alpha_composite(base_img, txt_layer)
         return out
 
     def preview(self, img_path, config_json, df):
-        if df is not None and not df.empty: row = df.iloc[0].to_dict()
+        if df is not None and not df.empty: 
+            # Берем первую строку, индекс 0
+            row = df.iloc[0].to_dict()
+            idx = 0
         else:
             cfg = json.loads(config_json)
             row = {z['column']: z['column'] for z in cfg['zones']}
-        return self.process(img_path, row, config_json)
+            # Добавим фейковый ID для превью, чтобы оно не скакало при каждом клике
+            row['ID'] = 'PREVIEW'
+            idx = 0
+        return self.process(img_path, row, config_json, row_index=idx)
 
     def batch(self, bg_source, df, config_json, cb_prog, cb_done):
         if isinstance(bg_source, str): bg_list = [bg_source]
@@ -249,14 +294,26 @@ class Generator:
         total = len(df)
         if not os.path.exists(OUTPUT_FOLDER): os.makedirs(OUTPUT_FOLDER)
         bg_count = len(bg_list)
-        for i, row in df.iterrows():
+        
+        # iterrows возвращает (index, Series)
+        # i - это индекс dataframe (он может быть не 0,1,2, если фильтровали), 
+        # поэтому лучше использовать enumerate для счетчика
+        for counter, (idx, row) in enumerate(df.iterrows()):
             if not self.is_running: break
             try:
-                current_bg_path = bg_list[i % bg_count]
-                img = self.process(current_bg_path, row, config_json)
-                if img: img.convert("RGB").save(os.path.join(OUTPUT_FOLDER, f"doc_{i+1}.jpg"))
-                if cb_prog: cb_prog(i+1, total)
-            except Exception as e: print(f"Err row {i}: {e}")
+                current_bg_path = bg_list[counter % bg_count]
+                
+                # ПЕРЕДАЕМ ROW (это Series превращаем в dict для удобства)
+                # И ПЕРЕДАЕМ COUNTER как индекс
+                row_dict = row.to_dict()
+                
+                img = self.process(current_bg_path, row_dict, config_json, row_index=counter)
+                
+                if img: img.convert("RGB").save(os.path.join(OUTPUT_FOLDER, f"doc_{counter+1}.jpg"))
+                if cb_prog: cb_prog(counter+1, total)
+            except Exception as e: 
+                print(f"Err row {counter}: {e}")
+                
         self.font_cache.clear()
         self.is_running = False
         if cb_done: cb_done()

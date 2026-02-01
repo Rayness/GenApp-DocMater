@@ -57,7 +57,7 @@ class Api:
 
     # === ОБНОВЛЕННЫЙ МЕТОД: ВЫБОР ФАЙЛА ===
     def pick_image(self):
-        r = self._window.create_file_dialog(webview.OPEN_DIALOG, file_types=('Images (*.jpg;*.png)','Documents (*.pdf;*.docx)',))
+        r = self._window.create_file_dialog(webview.FileDialog.OPEN, file_types=('Images (*.jpg;*.png)','Documents (*.pdf;*.docx)',))
         if r:
             self.background_mode = 'single'
             self.image_path = r[0]
@@ -72,23 +72,35 @@ class Api:
     # pick_excel, save_template, load_template, get_preview - ОСТАЮТСЯ БЕЗ ИЗМЕНЕНИЙ
     # (код их пропущу, он тот же)
     def pick_excel(self):
-        r = self._window.create_file_dialog(webview.OPEN_DIALOG, file_types=('Excel (*.xlsx;*.xls)',))
-        if r:
-            self.excel_path = r[0]
-            try:
-                self.df = pd.read_excel(r[0], dtype=str).fillna("")
-                return {"path": r[0], "columns": list(self.df.columns)}
-            except: pass
-        return None
+            # Используем константу webview.OPEN_DIALOG (она надежнее в разных версиях)
+            r = self._window.create_file_dialog(webview.FileDialog.OPEN, file_types=('Excel (*.xlsx;*.xls)',))
+            
+            if r:
+                path = r[0] if isinstance(r, tuple) else r
+                print(f"Выбран файл Excel: {path}")
+                try:
+                    # ВАЖНО: Добавили engine='openpyxl'
+                    self.excel_path = path
+                    self.df = pd.read_excel(path, dtype=str, engine='openpyxl').fillna("")
+                    
+                    columns = list(self.df.columns)
+                    print(f"Excel загружен. Колонок: {len(columns)}")
+                    return {"path": path, "columns": columns}
+                except Exception as e:
+                    # ВАЖНО: Выводим реальную ошибку в консоль
+                    print(f"КРИТИЧЕСКАЯ ОШИБКА EXCEL: {e}")
+                    # И можно вернуть ошибку во фронтенд, чтобы показать alert
+                    return None
+            return None
 
     def save_template(self, json_data):
-        r = self._window.create_file_dialog(webview.SAVE_DIALOG, save_filename='template.json')
+        r = self._window.create_file_dialog(webview.FileDialog.SAVE, save_filename='template.json')
         if r:
             p = r[0] if isinstance(r, tuple) else r
             with open(p, 'w', encoding='utf-8') as f: f.write(json_data)
 
     def load_template(self):
-        r = self._window.create_file_dialog(webview.OPEN_DIALOG)
+        r = self._window.create_file_dialog(webview.FileDialog.OPEN, file_types=('JSON (*.json)',))
         if r:
             p = r[0] if isinstance(r, tuple) else r
             try:

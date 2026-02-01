@@ -11,7 +11,7 @@
     <div class="sidebar">
         <!-- HEADER -->
         <div class="sidebar-header">
-            <h2>DocMaster Pro 1.1</h2>
+            <h2>DocMaster Pro 1.3</h2>
             <div style="display: flex; gap: 5px; margin-top: 10px;">
                 <button class="btn-primary" style="background: #28a745; margin:0;" onclick="saveProject()">💾 Save</button>
                 <button class="btn-primary" style="background: #17a2b8; margin:0;" onclick="loadProject()">📂 Open</button>
@@ -37,6 +37,15 @@
 
             <hr>
             <div class="section-title">2. Глобальный стиль</div>
+
+            <div class="control-group">
+                <label>Ключ проекта (Seed):</label>
+                <div style="display: flex; gap: 5px;">
+                    <input type="text" id="projectSeed" value="default" onchange="updateGlobals()" placeholder="Любое слово">
+                    <button class="btn-primary" style="width: 35px; margin: 0; background: #6c757d;" onclick="randomizeSeed()" title="Сбросить стили (Сгенерировать новый ключ)">🎲</button>
+                </div>
+                <div style="font-size: 10px; color: #888; margin-top: 2px;">Меняет почерк для тех же ID</div>
+            </div>
 
             <div class="control-group">
                 <label>Шрифт документа:</label>
@@ -176,13 +185,18 @@
                 
                 <!-- Меню привязано к canvasWrapper, чтобы масштабироваться вместе с ним или позиционироваться относительно него -->
                 <div id="floatingToolbar">
+                    <!-- Переключатель источника данных -->
+                    <div class="toolbar-mode-switch">
+                        <div id="modeExcel" class="t-switch active" onclick="setZoneMode('excel')">Excel</div>
+                        <div id="modeText" class="t-switch" onclick="setZoneMode('text')">Текст</div>
+                    </div>
+
                     <div class="toolbar-row">
+                        <!-- Показываем ЛИБО Select, ЛИБО Input -->
                         <select id="localColumn" title="Колонка Excel"></select>
+                        <input type="text" id="localStaticText" placeholder="Введите текст..." style="display: none;">
                         
-                        <!-- Кнопка Дублировать -->
                         <button class="btn-icon" onclick="duplicateActiveZone()" title="Дублировать (Ctrl+D)" style="background: #eef; color: #333;">❐</button>
-                        
-                        <!-- Кнопка Удалить -->
                         <button class="btn-icon delete" onclick="deleteActiveZone()" title="Удалить (Delete)">🗑</button>
                     </div>
                     
@@ -192,7 +206,11 @@
                     
                     <div id="localSettings" style="display: none; margin-top: 5px;">
                         <select id="localFont" style="width: 100%; margin-bottom: 3px;"></select>
-                        <input type="number" id="localSize" placeholder="Размер" style="width: 60px;">
+                        <div class="dual-slider-container" id="grp-localSize" style="height: 35px; margin-bottom: 0;">
+                            <!-- Слайдер размера сделаем позже в JS или оставим input, 
+                                но для простоты вернем input number, так как места мало -->
+                            <input type="number" id="localSize" placeholder="Размер" style="width: 100%;">
+                        </div>
                     </div>
                 </div>
             </div>

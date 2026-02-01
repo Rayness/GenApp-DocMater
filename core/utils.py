@@ -13,6 +13,17 @@ def resource_path(relative_path):
         base_path = os.path.abspath(".")
     return os.path.join(base_path, relative_path)
 
+def get_external_path(folder_name):
+    """Возвращает путь к папке, лежащей РЯДОМ с exe файлом"""
+    if getattr(sys, 'frozen', False):
+        # Если запущено как exe
+        base_path = os.path.dirname(sys.executable)
+    else:
+        # Если запущено из скрипта (мы сейчас в core/utils.py, нам нужно на уровень выше)
+        base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    
+    return os.path.join(base_path, folder_name)
+
 def image_to_base64(path):
     try:
         with open(path, "rb") as image_file:

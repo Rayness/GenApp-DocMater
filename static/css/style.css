@@ -246,3 +246,35 @@ input[type="range"].dual-range::-moz-range-thumb {
 .font-weight-inp {
     width: 50px;
 }
+
+/* Добавь в конец */
+
+.toolbar-mode-switch {
+    display: flex;
+    background: #f0f0f0;
+    border-radius: 4px;
+    padding: 2px;
+    margin-bottom: 5px;
+}
+.t-switch {
+    flex: 1;
+    text-align: center;
+    font-size: 11px;
+    padding: 3px;
+    cursor: pointer;
+    border-radius: 3px;
+    color: #666;
+}
+.t-switch.active {
+    background: white;
+    font-weight: bold;
+    color: #2196f3;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+/* Сделаем инпут текста в тулбаре красивым */
+#localStaticText {
+    font-size: 12px;
+    padding: 4px;
+    border: 1px solid #2196f3;
+}

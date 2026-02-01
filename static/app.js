@@ -22,6 +22,7 @@ let currentExcelPath = "";
 
 // Settings
 let globalSettings = {
+    seed: 'default',
     font: 'random_per_doc',
     size: {min: 18, max: 24}, 
     color: '#1414A0',
@@ -34,6 +35,15 @@ let globalSettings = {
     slant: {min: -0.5, max: 0.5},
     kerning: {min: 1, max: 3}
 };
+
+// === SEED LOGIC ===
+function randomizeSeed() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let result = '';
+    for (let i = 0; i < 6; i++) result += chars.charAt(Math.floor(Math.random() * chars.length));
+    document.getElementById('projectSeed').value = result;
+    updateGlobals();
+}
 
 function setSourceMode(mode) {
     sourceMode = mode;
@@ -358,10 +368,22 @@ function createZone(element, initialSettings = null) {
     label.innerText = initialSettings ? initialSettings.column : (excelColumns[0] || "");
     element.appendChild(label);
 
+    // НАСТРОЙКИ ПО УМОЛЧАНИЮ
+    const defaults = { 
+        sourceType: 'excel', // 'excel' или 'text'
+        content: excelColumns[0] || "", // Имя колонки ИЛИ статический текст
+        font: null, 
+        size: null 
+    };
+
+    const settings = initialSettings ? { ...defaults, ...initialSettings } : defaults;
+
+    label.innerText = settings.content; // Показываем контент
+
     const data = {
         id: id,
         element: element,
-        settings: initialSettings || { column: excelColumns[0] || "", font: null, size: null }
+        settings: settings
     };
     zones.push(data);
 
@@ -414,8 +436,20 @@ function createZone(element, initialSettings = null) {
         window.addEventListener('mouseup', stp);
     });
 
+    element.addEventListener('mousedown', (e) => {/*...*/});
+    handle.addEventListener('mousedown', (e) => {/*...*/});
     selectZone(id);
 }
+
+// 2. Новая функция переключения режима в тулбаре
+function setZoneMode(mode) {
+    if(!activeZoneId) return;
+    const z = zones.find(x => x.id === activeZoneId);
+    z.settings.sourceType = mode;
+    
+    updateToolbarUI(z);
+}
+
 
 function selectZone(id) {
     activeZoneId = id;
@@ -426,7 +460,10 @@ function selectZone(id) {
     z.element.classList.add('selected');
     toolbar.style.display = 'block';
     
-    inpLocalCol.value = z.settings.column;
+    // Заполняем UI значениями из зоны
+    updateToolbarUI(z);
+
+    // Локальные стили (как было)
     const isOverride = (z.settings.font !== null);
     chkOverride.checked = isOverride;
     divLocalSet.style.display = isOverride ? 'block' : 'none';
@@ -445,6 +482,36 @@ function updateToolbarPos() {
     
     toolbar.style.left = left + 'px';
     toolbar.style.top = top + 'px';
+}
+
+function updateToolbarUI(z) {
+    const mode = z.settings.sourceType || 'excel'; // fallback
+    const excelInput = document.getElementById('localColumn');
+    const textInput = document.getElementById('localStaticText');
+    const btnExcel = document.getElementById('modeExcel');
+    const btnText = document.getElementById('modeText');
+
+    // Переключаем видимость инпутов
+    if (mode === 'excel') {
+        excelInput.style.display = 'block';
+        textInput.style.display = 'none';
+        btnExcel.classList.add('active');
+        btnText.classList.remove('active');
+        excelInput.value = z.settings.content; // Выбираем колонку
+    } else {
+        excelInput.style.display = 'none';
+        textInput.style.display = 'block';
+        btnExcel.classList.remove('active');
+        btnText.classList.add('active');
+        textInput.value = z.settings.content; // Пишем текст
+    }
+}
+
+document.getElementById('localStaticText').oninput = (e) => {
+    if(!activeZoneId) return;
+    const z = zones.find(x => x.id === activeZoneId);
+    z.settings.content = e.target.value; // Сохраняем текст
+    z.element.querySelector('.zone-label').innerText = e.target.value;
 }
 
 function deselectZone() {
@@ -497,6 +564,7 @@ document.addEventListener('keydown', (e) => {
 
 // === UI & API HELPERS ===
 function updateGlobals() {
+    globalSettings.seed = document.getElementById('projectSeed').value;
     // 1. Простые поля
     globalSettings.font = document.getElementById('globalFont').value;
     globalSettings.color = document.getElementById('globalColor').value;
@@ -516,7 +584,7 @@ function updateGlobals() {
 inpLocalCol.onchange = () => {
     if(!activeZoneId) return;
     const z = zones.find(x => x.id === activeZoneId);
-    z.settings.column = inpLocalCol.value;
+    z.settings.content = inpLocalCol.value; // Сохраняем имя колонки
     z.element.querySelector('.zone-label').innerText = inpLocalCol.value;
 };
 chkOverride.onchange = () => {
@@ -569,9 +637,15 @@ function selectExcel() {
 function getConfig() {
     updateGlobals();
     const zonesConfig = zones.map(z => ({
-        column: z.settings.column, font: z.settings.font, size: z.settings.size,
-        x: parseInt(z.element.style.left), y: parseInt(z.element.style.top),
-        width: parseInt(z.element.style.width), height: parseInt(z.element.style.height)
+        sourceType: z.settings.sourceType || 'excel', // Передаем тип
+        content: z.settings.content,                  // И контент (имя колонки или сам текст)
+        
+        font: z.settings.font,
+        size: z.settings.size,
+        x: parseInt(z.element.style.left),
+        y: parseInt(z.element.style.top),
+        width: parseInt(z.element.style.width),
+        height: parseInt(z.element.style.height)
     }));
     return JSON.stringify({ globals: globalSettings, zones: zonesConfig });
 }
@@ -663,7 +737,9 @@ function loadProject() {
             // А. Простые поля
             if (g.font) document.getElementById('globalFont').value = g.font;
             if (g.color) document.getElementById('globalColor').value = g.color;
-
+            if (g.seed) document.getElementById('projectSeed').value = g.seed;
+            else document.getElementById('projectSeed').value = 'default';
+            
             // Б. Хелпер для двойных слайдеров
             const setDual = (prefix, val) => {
                 if (val === undefined || val === null) return; // Защита от отсутствующих полей

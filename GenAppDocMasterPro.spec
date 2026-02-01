@@ -5,7 +5,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('static', 'static'), ('fonts', 'fonts')],
+    datas=[('static', 'static')],
     hiddenimports=['openpyxl', 'docx2pdf'],
     hookspath=[],
     hooksconfig={},
