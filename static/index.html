@@ -153,6 +153,42 @@
                         <input type="range" class="dual-range" id="kernMax" min="0" max="20" step="1" value="3" oninput="dualSlide('kern')">
                     </div>
 
+                    <!-- === ВАРИАЦИЯ ВЫСОТЫ (0 - 50%) === -->
+                    <div class="dual-slider-container" id="grp-hvar">
+                        <div class="slider-header">
+                            <span>Высота букв</span>
+                            <span class="range-values" id="disp-hvar">0 - 15</span>
+                        </div>
+                        <div class="slider-track-bg"></div>
+                        <div class="slider-track-fill" id="fill-hvar"></div>
+                        <input type="range" class="dual-range" id="hvarMin" min="0" max="50" step="1" value="0" oninput="dualSlide('hvar')">
+                        <input type="range" class="dual-range" id="hvarMax" min="0" max="50" step="1" value="15" oninput="dualSlide('hvar')">
+                    </div>
+
+                    <!-- === ВАРИАЦИЯ ШИРИНЫ (0 - 50%) === -->
+                    <div class="dual-slider-container" id="grp-wvar">
+                        <div class="slider-header">
+                            <span>Ширина букв</span>
+                            <span class="range-values" id="disp-wvar">0 - 10</span>
+                        </div>
+                        <div class="slider-track-bg"></div>
+                        <div class="slider-track-fill" id="fill-wvar"></div>
+                        <input type="range" class="dual-range" id="wvarMin" min="0" max="50" step="1" value="0" oninput="dualSlide('wvar')">
+                        <input type="range" class="dual-range" id="wvarMax" min="0" max="50" step="1" value="10" oninput="dualSlide('wvar')">
+                    </div>
+
+                    <!-- === ДЕФОРМАЦИЯ БУКВ (0 - 100) === -->
+                    <div class="dual-slider-container" id="grp-distort">
+                        <div class="slider-header">
+                            <span>Деформация букв</span>
+                            <span class="range-values" id="disp-distort">0 - 20</span>
+                        </div>
+                        <div class="slider-track-bg"></div>
+                        <div class="slider-track-fill" id="fill-distort"></div>
+                        <input type="range" class="dual-range" id="distortMin" min="0" max="100" step="1" value="0" oninput="dualSlide('distort')">
+                        <input type="range" class="dual-range" id="distortMax" min="0" max="100" step="1" value="20" oninput="dualSlide('distort')">
+                    </div>
+
                 </div>
             </details>
         </div>

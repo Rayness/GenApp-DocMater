@@ -33,7 +33,10 @@ let globalSettings = {
     opacity: {min: 7, max: 9},
     blur: {min: 0, max: 0.5},
     slant: {min: -0.5, max: 0.5},
-    kerning: {min: 1, max: 3}
+    kerning: {min: 1, max: 3},
+    height_variation: {min: 0, max: 15},  // Вариация высоты букв (%)
+    width_variation: {min: 0, max: 10},   // Вариация ширины букв (%)
+    distortion: {min: 0, max: 20}         // Деформация букв (0-100)
 };
 
 // === SEED LOGIC ===
@@ -198,8 +201,8 @@ const inpLocalSize = document.getElementById('localSize');
 
 // === INIT ===
 window.addEventListener('pywebviewready', () => {
-    // Добавь 'cvar' в список
-    ['size', 'cvar', 'shake', 'opacity', 'blur', 'slant', 'kern'].forEach(id => dualSlide(id, true));
+    // Добавь 'hvar', 'wvar' и 'distort' в список
+    ['size', 'cvar', 'shake', 'opacity', 'blur', 'slant', 'kern', 'hvar', 'wvar', 'distort'].forEach(id => dualSlide(id, true));
     
     setTimeout(() => {
         window.pywebview.api.get_fonts_list().then(f => {
@@ -577,6 +580,9 @@ function updateGlobals() {
     globalSettings.slant = getRangeValues('slant');
     globalSettings.kerning = getRangeValues('kern');
     globalSettings.color_var = getRangeValues('cvar'); // Не забываем новый слайдер цвета!
+    globalSettings.height_variation = getRangeValues('hvar'); // Вариация высоты
+    globalSettings.width_variation = getRangeValues('wvar');  // Вариация ширины
+    globalSettings.distortion = getRangeValues('distort');    // Деформация букв
 
     // 3. Конфиг шрифтов (fonts_config) обновляется через модальное окно, 
     // поэтому здесь его не трогаем, чтобы не стереть.
@@ -780,6 +786,9 @@ function loadProject() {
             setDual('slant', g.slant);
             setDual('kern', g.kerning);
             setDual('cvar', g.color_var); // Вариативность цвета
+            setDual('hvar', g.height_variation); // Вариация высоты
+            setDual('wvar', g.width_variation);  // Вариация ширины
+            setDual('distort', g.distortion);    // Деформация букв
 
             // Г. Конфиг весов шрифтов
             if (g.fonts_config) {

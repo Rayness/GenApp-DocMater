@@ -35,6 +35,36 @@ class Generator:
     def _hex_to_rgb(self, hex_color):
         hex_color = hex_color.lstrip('#')
         return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    
+    def _get_perspective_coefficients(self, src_points, dst_points):
+        """
+        Вычисляет коэффициенты для перспективной трансформации.
+        src_points и dst_points - списки из 4 точек (x, y) каждая.
+        Возвращает кортеж из 8 коэффициентов для Image.PERSPECTIVE.
+        Использует numpy для решения системы уравнений.
+        """
+        try:
+            import numpy as np
+            
+            # Создаем матрицу для системы уравнений
+            A = []
+            b = []
+            
+            for (x, y), (X, Y) in zip(src_points, dst_points):
+                A.append([x, y, 1, 0, 0, 0, -X*x, -X*y])
+                A.append([0, 0, 0, x, y, 1, -Y*x, -Y*y])
+                b.extend([X, Y])
+            
+            A = np.array(A, dtype=float)
+            b = np.array(b, dtype=float)
+            
+            # Решаем систему уравнений
+            coeffs = np.linalg.lstsq(A, b, rcond=None)[0]
+            
+            return tuple(coeffs)
+        except Exception as e:
+            # В случае ошибки возвращаем единичную трансформацию
+            return (1, 0, 0, 0, 1, 0, 0, 0)
 
     def _pick_weighted_font(self, available_fonts, fonts_config):
         """Выбирает один шрифт на основе весов"""
@@ -56,6 +86,9 @@ class Generator:
         slant = phys['slant']
         blur_val = phys['blur']
         max_kern = int(phys['kerning'])
+        height_var = phys.get('height_variation', 0)  # Вариация высоты (0-100%)
+        width_var = phys.get('width_variation', 0)    # Вариация ширины (0-100%)
+        distortion = phys.get('distortion', 0)        # Деформация букв (0-100)
         
         cursor_x = x
         scale_factor = 3 
@@ -80,18 +113,62 @@ class Generator:
             
             current_color = vary_color(base_color, variance=15)
             
+            # Вариация размера символа для реалистичности
+            # height_var и width_var в процентах (0-100)
+            # Генерируем случайные множители от (1 - var/100) до (1 + var/100)
+            h_factor = 1.0 + random.uniform(-height_var/100, height_var/100)
+            w_factor = 1.0 + random.uniform(-width_var/100, width_var/100)
+            
             # Подготовка
             orig_size = int(size * 2.5)
             c_size = orig_size * scale_factor
             big_font = self._get_cached_font(current_font_name, size * scale_factor)
             if not big_font: big_font = font
 
-            char_img = Image.new('RGBA', (c_size, c_size), (255,255,255,0))
+            # Создаем холст побольше, чтобы вместить варьирующийся размер
+            canvas_size = int(c_size * max(h_factor, w_factor) * 1.2)
+            char_img = Image.new('RGBA', (canvas_size, canvas_size), (255,255,255,0))
             d = ImageDraw.Draw(char_img)
             
             # === НИКАКОЙ ОБВОДКИ ===
             # stroke_width убираем (ставим 0), чтобы шрифт был естественным
-            d.text((c_size//4, c_size//4), char, font=big_font, fill=(*current_color, alpha), stroke_width=0)
+            d.text((canvas_size//4, canvas_size//4), char, font=big_font, fill=(*current_color, alpha), stroke_width=0)
+            
+            # Применяем вариацию высоты и ширины через масштабирование
+            if h_factor != 1.0 or w_factor != 1.0:
+                new_w = int(canvas_size * w_factor)
+                new_h = int(canvas_size * h_factor)
+                char_img = char_img.resize((new_w, new_h), resample=Image.LANCZOS)
+                # Обрезаем/дополняем до квадрата для дальнейших трансформаций
+                final_canvas = Image.new('RGBA', (canvas_size, canvas_size), (255,255,255,0))
+                offset_x = (canvas_size - new_w) // 2
+                offset_y = (canvas_size - new_h) // 2
+                final_canvas.paste(char_img, (offset_x, offset_y))
+                char_img = final_canvas
+            
+            # Деформация букв (перспективное искажение)
+            if distortion > 0:
+                # Применяем случайную перспективную деформацию
+                # distortion в процентах (0-100) определяет максимальный сдвиг углов
+                max_shift = (distortion / 100.0) * canvas_size * 0.15  # Максимум 15% от размера
+                
+                # Исходные углы квадрата
+                width = canvas_size
+                height = canvas_size
+                
+                # Целевые углы с небольшими случайными сдвигами
+                coeffs = self._get_perspective_coefficients(
+                    # Исходные 4 угла (верхний левый, верхний правый, нижний правый, нижний левый)
+                    [(0, 0), (width, 0), (width, height), (0, height)],
+                    # Целевые углы со случайными сдвигами
+                    [
+                        (random.uniform(-max_shift, max_shift), random.uniform(-max_shift, max_shift)),
+                        (width + random.uniform(-max_shift, max_shift), random.uniform(-max_shift, max_shift)),
+                        (width + random.uniform(-max_shift, max_shift), height + random.uniform(-max_shift, max_shift)),
+                        (random.uniform(-max_shift, max_shift), height + random.uniform(-max_shift, max_shift))
+                    ]
+                )
+                char_img = char_img.transform((canvas_size, canvas_size), Image.PERSPECTIVE, coeffs, resample=Image.BICUBIC)
             
             # Blur (теперь зависит только от слайдера Blur)
             if blur_val > 0:
@@ -102,13 +179,13 @@ class Generator:
             # Slant
             shear_val = slant * 0.1 + random.uniform(-0.02, 0.02)
             if abs(shear_val) > 0.01:
-                char_img = char_img.transform((c_size, c_size), Image.AFFINE, (1, -shear_val, 0, 0, 1, 0), resample=Image.BICUBIC)
+                char_img = char_img.transform((canvas_size, canvas_size), Image.AFFINE, (1, -shear_val, 0, 0, 1, 0), resample=Image.BICUBIC)
 
             # Rotation
             ang = random.uniform(-shake * 1.2, shake * 1.2)
             char_img = char_img.rotate(ang, resample=Image.BICUBIC)
             
-            # Resize
+            # Resize до финального размера
             char_img = char_img.resize((orig_size, orig_size), resample=Image.LANCZOS)
             
             # Jitter
@@ -230,7 +307,10 @@ class Generator:
             'opacity':   self._get_val(glo.get('opacity', 8)),
             'kerning':   self._get_val(glo.get('kerning', 0)),
             'slant':     self._get_val(glo.get('slant', 0)),
-            'blur':      self._get_val(glo.get('blur', 0))
+            'blur':      self._get_val(glo.get('blur', 0)),
+            'height_variation': self._get_val(glo.get('height_variation', 0)),
+            'width_variation':  self._get_val(glo.get('width_variation', 0)),
+            'distortion': self._get_val(glo.get('distortion', 0))
         }
 
         base_rgb = self._hex_to_rgb(glo['color'])
