@@ -48,6 +48,14 @@
             </div>
 
             <div class="control-group">
+                <label>Режим шрифта:</label>
+                <div style="display: flex; background: #e9ecef; border-radius: 4px; padding: 2px; margin-bottom: 5px;">
+                    <div id="fontTypeHandwriting" class="switch-opt active" onclick="setFontType('handwriting')">✍️ Рукопись</div>
+                    <div id="fontTypeSystem" class="switch-opt" onclick="setFontType('system')">🔤 Обычный</div>
+                </div>
+            </div>
+
+            <div class="control-group">
                 <label>Шрифт документа:</label>
                 <div style="display: flex; gap: 5px;">
                     <select id="globalFont" onchange="updateGlobals()" style="flex-grow: 1;">
@@ -55,7 +63,7 @@
                         <option value="random">🎲 Случайный (Разные поля)</option>
                     </select>
                     <!-- КНОПКА НАСТРОЙКИ -->
-                    <button class="btn-primary" style="width: 35px; padding: 0; margin: 0; background: #6c757d;" onclick="openFontManager()" title="Настроить частоту шрифтов">⚙️</button>
+                    <button id="btnFontManager" class="btn-primary" style="width: 35px; padding: 0; margin: 0; background: #6c757d;" onclick="openFontManager()" title="Настроить частоту шрифтов">⚙️</button>
                 </div>
             </div>
 
@@ -71,10 +79,19 @@
                 <input type="range" class="dual-range" id="sizeMin" min="10" max="100" step="1" value="18" oninput="dualSlide('size')">
                 <input type="range" class="dual-range" id="sizeMax" min="10" max="100" step="1" value="24" oninput="dualSlide('size')">
             </div>
+            <div style="font-size: 10px; margin: -4px 0 4px 0;">
+                <span id="bgDpiInfo" style="color: #888; float: right;">Фон: 96 dpi</span>
+                <span id="sizeHint" style="color: #2e7d32; font-weight: 600;"></span>
+            </div>
+            <button id="btnFitZones" class="btn-primary" onclick="fitZoneHeights()"
+                    style="display: none; background: #c62828; font-size: 11px; padding: 5px; margin-bottom: 8px;"
+                    title="Ползунок размера задаёт максимум: генератор ужимает шрифт под высоту зоны">
+                ↕ Подогнать высоту зон под размер
+            </button>
 
             <div class="control-group">
                 <label>Цвет чернил:</label>
-                <input type="color" id="globalColor" value="#1414A0" style="width: 100%; height: 30px;" oninput="updateGlobals()">
+                <input type="color" id="globalColor" value="#2A3B8F" style="width: 100%; height: 30px;" oninput="updateGlobals()">
             </div>
             <details open>
                 <summary>✍️ Физика (Диапазоны)</summary>
@@ -191,6 +208,74 @@
 
                 </div>
             </details>
+
+            <div class="section-title">3. Печать</div>
+
+            <div class="control-group">
+                <label>Разрешение вывода (DPI):</label>
+                <select id="printDpi" onchange="updateGlobals()">
+                    <option value="300" selected>300 — стандарт для печати</option>
+                    <option value="400">400 — чуть чётче штрих</option>
+                    <option value="600">600 — максимум (файлы тяжелее)</option>
+                    <option value="150">150 — только для черновика</option>
+                </select>
+                <div style="font-size: 10px; color: #888; margin-top: 2px;">
+                    Если фон в низком разрешении, он будет увеличен до этого DPI,
+                    и чернила отрисуются уже в нём. Линии бланка останутся мягкими
+                    (как у ксерокопии), но сам почерк будет чётким.
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Формат файлов:</label>
+                <select id="outputFormat" onchange="updateGlobals()">
+                    <option value="png" selected>PNG — без потерь</option>
+                    <option value="jpg">JPEG — легче, но с артефактами</option>
+                </select>
+                <label style="display:flex; align-items:center; gap:6px; margin-top:6px; font-weight:normal;">
+                    <input type="checkbox" id="outputPdf" checked onchange="updateGlobals()" style="width:auto; margin:0;">
+                    Собрать print_ready.pdf
+                </label>
+            </div>
+
+            <details style="margin: 8px 0; font-size: 11px;">
+                <summary style="cursor: pointer; color: #6c757d; font-weight: 600; padding: 4px 0;">
+                    ⚠️ Памятка: почему видно, что напечатано
+                </summary>
+                <div style="background: #fff8e1; border-left: 3px solid #ffc107; padding: 8px; line-height: 1.5; color: #5f5340; margin-top: 4px;">
+                    <b>1. Печатайте PDF, а не картинки.</b> PDF несёт физический размер листа,
+                    принтер кладёт растр 1:1. При печати PNG/JPEG из просмотрщика Windows
+                    всегда происходит «вписать в лист» — это лишняя передискретизация
+                    поверх готового изображения, и края штрихов расплываются.
+
+                    <hr style="border:none; border-top:1px solid #ffe082; margin:6px 0;">
+
+                    <b>2. Не гонитесь за CMYK.</b> Экспорт в CMYK тут только навредит:
+                    без ICC-профиля конвертация наивная, а драйвер принтера всё равно
+                    переводит цвет сам и делает это лучше.
+
+                    <hr style="border:none; border-top:1px solid #ffe082; margin:6px 0;">
+
+                    <b>3. Цвет чернил держите в охвате CMYK.</b> Насыщенный синий
+                    (<code>#1414A0</code> и подобные) на бумаге физически недостижим и
+                    печатается тускло-грязным. Берите примерно <code>#2A3B8F</code>.
+                    В драйвере принтера отключите цветокоррекцию и режимы
+                    «яркие цвета» / «улучшение фото».
+
+                    <hr style="border:none; border-top:1px solid #ffe082; margin:6px 0;">
+
+                    <b>4. Струйный принтер убедительнее лазерного.</b> Тонер даёт плоский
+                    глянцевый слой, который не похож на пасту ни на просвет, ни на ощупь.
+                    Струйный с пигментными чернилами ближе всего.
+
+                    <hr style="border:none; border-top:1px solid #ffe082; margin:6px 0;">
+
+                    <b>5. Ползунок «Непрозрачность» — это нажим пера.</b> Он меняет
+                    насыщенность чернил, а не прозрачность. Слишком низкие значения дают
+                    бледный штрих, который принтер печатает видимой точечной сеткой —
+                    у настоящей пасты такой сетки нет.
+                </div>
+            </details>
         </div>
 
         <!-- FOOTER -->
@@ -211,6 +296,16 @@
                 <div id="progVal" style="font-size: 11px; text-align: center;"></div>
             </div>
         </div>
+    </div>
+
+    <!-- TOOL PANEL -->
+    <div id="toolPanel">
+        <button id="toolZone"    class="tool-btn active" onclick="setTool('zone')"    title="Зоны — рисовать текстовые области (Z)">▭</button>
+        <button id="toolPaint"   class="tool-btn"        onclick="setTool('paint')"   title="Закраска — закрасить область (B)">🖌</button>
+        <button id="toolEyedrop" class="tool-btn"        onclick="setTool('eyedrop')" title="Пипетка — выбрать цвет с документа (I)">💉</button>
+        <div class="tool-sep"></div>
+        <input  type="color" id="paintColorPicker" value="#ffffff" title="Цвет закраски" oninput="currentPaintColor = this.value">
+        <span class="tool-label">Цвет</span>
     </div>
 
     <!-- WORKSPACE С НОВОЙ СТРУКТУРОЙ ДЛЯ ЗУМА -->
@@ -255,8 +350,17 @@
 
     <!-- PREVIEW MODAL -->
     <div class="modal" id="previewModal">
-        <img id="previewImg">
-        <button class="modal-close" onclick="closePreview()">Закрыть</button>
+        <div id="previewViewport">
+            <div id="previewPanContainer">
+                <img id="previewImg">
+            </div>
+        </div>
+        <div class="preview-footer">
+            <span id="previewZoomLabel">100%</span>
+            <button onclick="resetPreviewZoom()">⊡ Вписать</button>
+            <button onclick="setPreviewZoom(1)">100%</button>
+            <button class="btn-close-prev" onclick="closePreview()">✕ Закрыть</button>
+        </div>
     </div>
 
     <div class="modal" id="fontManagerModal">
@@ -276,6 +380,14 @@
             </div>
         </div>
     </div>
+
+    <!-- Context menu for paint patches -->
+    <div id="patchContextMenu">
+        <div class="ctx-item danger" id="ctxPatchDelete">🗑 Удалить</div>
+    </div>
+
+    <!-- Hidden canvas for eyedropper color sampling -->
+    <canvas id="eyedropCanvas" style="display:none;"></canvas>
 
     <script src="app.js"></script>
 </body>

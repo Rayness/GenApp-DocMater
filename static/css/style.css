@@ -188,6 +188,55 @@ input[type="range"].dual-range::-moz-range-thumb {
 .modal img { max-height: 85vh; border: 2px solid white; box-shadow: 0 0 30px black; }
 .modal-close { margin-top: 15px; padding: 8px 20px; background: white; }
 
+/* PREVIEW ZOOM */
+#previewViewport {
+    width: 90vw;
+    height: 85vh;
+    overflow: hidden;
+    cursor: grab;
+    border: 2px solid white;
+    box-shadow: 0 0 30px black;
+    position: relative;
+    background: #222;
+}
+#previewViewport:active { cursor: grabbing; }
+#previewPanContainer {
+    position: absolute;
+    transform-origin: 0 0;
+    will-change: transform;
+}
+#previewImg {
+    display: block;
+    max-width: none !important;
+    max-height: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    user-select: none;
+    pointer-events: none;
+}
+.preview-footer {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 10px;
+    color: white;
+    font-size: 13px;
+}
+.preview-footer button {
+    padding: 6px 14px;
+    background: rgba(255,255,255,0.15);
+    color: white;
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
+.preview-footer button:hover { background: rgba(255,255,255,0.25); }
+.preview-footer .btn-close-prev {
+    background: rgba(220,53,69,0.7);
+    border-color: rgba(220,53,69,0.9);
+}
+
 /* style.css */
 .switch-opt {
     flex: 1;
@@ -278,3 +327,98 @@ input[type="range"].dual-range::-moz-range-thumb {
     padding: 4px;
     border: 1px solid #2196f3;
 }
+
+/* === TOOL PANEL === */
+#toolPanel {
+    position: fixed;
+    top: 12px;
+    left: 50%;
+    transform: translateX(calc(-50% + 150px)); /* сдвиг от центра с учётом сайдбара */
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(30, 30, 30, 0.92);
+    padding: 6px 10px;
+    border-radius: 8px;
+    box-shadow: 0 3px 12px rgba(0,0,0,0.4);
+    z-index: 1500;
+    backdrop-filter: blur(4px);
+}
+
+.tool-btn {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    font-size: 17px;
+    background: rgba(255,255,255,0.1);
+    color: #eee;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 5px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+}
+.tool-btn:hover { background: rgba(255,255,255,0.2); }
+.tool-btn.active {
+    background: #2196f3;
+    border-color: #1565c0;
+    color: white;
+}
+
+.tool-sep {
+    width: 1px;
+    height: 26px;
+    background: rgba(255,255,255,0.2);
+    margin: 0 2px;
+}
+
+#paintColorPicker {
+    width: 34px;
+    height: 34px;
+    padding: 2px;
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 5px;
+    background: none;
+    cursor: pointer;
+}
+
+.tool-label {
+    font-size: 11px;
+    color: #aaa;
+    margin-left: 2px;
+}
+
+/* === PAINT PATCHES === */
+.paint-patch {
+    position: absolute;
+    cursor: move;
+    box-sizing: border-box;
+    pointer-events: auto;
+}
+.paint-patch:hover {
+    outline: 2px solid rgba(220, 53, 69, 0.6);
+    outline-offset: 1px;
+}
+
+/* Контекстное меню закрасок */
+#patchContextMenu {
+    display: none;
+    position: fixed;
+    background: white;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    z-index: 9000;
+    min-width: 140px;
+    padding: 4px 0;
+}
+#patchContextMenu .ctx-item {
+    padding: 8px 16px;
+    font-size: 13px;
+    cursor: pointer;
+    color: #333;
+}
+#patchContextMenu .ctx-item:hover { background: #f0f0f0; }
+#patchContextMenu .ctx-item.danger { color: #dc3545; }

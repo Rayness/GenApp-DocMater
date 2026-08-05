@@ -16,6 +16,16 @@ let currentUiScale = 1;
 let isDrawing = false;
 let startDrawX, startDrawY, tempZone;
 
+// Paint tool
+let currentTool = 'zone';   // 'zone' | 'paint' | 'eyedrop'
+let paintPatches = [];       // [{el, x, y, w, h, color}]
+let currentPaintColor = '#ffffff';
+let isPaintDrawing = false;
+let paintStartX, paintStartY, tempPatch;
+
+// Font type
+let fontType = 'handwriting'; // 'handwriting' | 'system'
+
 // Files
 let currentImagePath = ""; 
 let currentExcelPath = ""; 
@@ -23,9 +33,14 @@ let currentExcelPath = "";
 // Settings
 let globalSettings = {
     seed: 'default',
+    fontType: 'handwriting',
     font: 'random_per_doc',
-    size: {min: 18, max: 24}, 
-    color: '#1414A0',
+    size: {min: 18, max: 24},
+    // #1414A0 был вне охвата CMYK и на бумаге уходил в тусклый грязный оттенок
+    color: '#2A3B8F',
+    print_dpi: 300,
+    output_format: 'png',
+    output_pdf: true,
     fonts_config: {},
     // Добавили cvar
     color_var: {min: 0, max: 20}, 
@@ -46,6 +61,86 @@ function randomizeSeed() {
     for (let i = 0; i < 6; i++) result += chars.charAt(Math.floor(Math.random() * chars.length));
     document.getElementById('projectSeed').value = result;
     updateGlobals();
+}
+
+// === FONT TYPE ===
+function setFontType(type) {
+    fontType = type;
+    globalSettings.fontType = type;
+
+    document.getElementById('fontTypeHandwriting').className = (type === 'handwriting') ? 'switch-opt active' : 'switch-opt';
+    document.getElementById('fontTypeSystem').className       = (type === 'system')      ? 'switch-opt active' : 'switch-opt';
+
+    // Show/hide physics panel and font manager button
+    const physicsDetails = document.querySelector('details');
+    const btnFM = document.getElementById('btnFontManager');
+    if (type === 'system') {
+        if (physicsDetails) physicsDetails.style.opacity = '0.4';
+        if (physicsDetails) physicsDetails.style.pointerEvents = 'none';
+        if (btnFM) btnFM.style.display = 'none';
+        loadSystemFonts();
+    } else {
+        if (physicsDetails) physicsDetails.style.opacity = '';
+        if (physicsDetails) physicsDetails.style.pointerEvents = '';
+        if (btnFM) btnFM.style.display = '';
+        // Restore handwriting fonts
+        updateGlobalFontSelect();
+        updateLocalFontSelect();
+    }
+}
+
+function loadSystemFonts() {
+    window.pywebview.api.get_system_fonts_list().then(fonts => {
+        const gSel = document.getElementById('globalFont');
+        const lSel = document.getElementById('localFont');
+        const prevG = gSel.value;
+        gSel.innerHTML = `<option value="random_per_doc">🎲 Случайный (Один на документ)</option><option value="random">🎲 Случайный (Разные поля)</option>`;
+        lSel.innerHTML = '';
+        fonts.forEach(f => {
+            const name = f.replace(/\.[^/.]+$/, ''); // strip extension for display
+            gSel.add(new Option(name, f));
+            lSel.add(new Option(name, f));
+        });
+        if (prevG) gSel.value = prevG;
+    }).catch(() => {});
+}
+
+// === TOOL SELECTION ===
+function setTool(tool) {
+    currentTool = tool;
+    ['zone', 'paint', 'eyedrop'].forEach(t => {
+        const btn = document.getElementById('tool' + t.charAt(0).toUpperCase() + t.slice(1));
+        if (btn) btn.classList.toggle('active', t === tool);
+    });
+    // Cursor feedback
+    const ws = document.getElementById('workspace');
+    if (tool === 'eyedrop') ws.style.cursor = 'crosshair';
+    else ws.style.cursor = 'default';
+}
+
+// === EYEDROPPER ===
+function sampleColorAt(e) {
+    const img = document.getElementById('docImage');
+    if (!img.src || img.src === window.location.href) return;
+
+    const rect = wrapper.getBoundingClientRect();
+    const imgX = Math.floor((e.clientX - rect.left) / scale);
+    const imgY = Math.floor((e.clientY - rect.top)  / scale);
+
+    const canvas = document.getElementById('eyedropCanvas');
+    canvas.width  = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+
+    const px = ctx.getImageData(Math.max(0, imgX), Math.max(0, imgY), 1, 1).data;
+    const hex = '#' + [px[0], px[1], px[2]].map(v => v.toString(16).padStart(2, '0')).join('');
+
+    currentPaintColor = hex;
+    document.getElementById('paintColorPicker').value = hex;
+
+    // Switch to paint tool automatically
+    setTool('paint');
 }
 
 function setSourceMode(mode) {
@@ -72,9 +167,11 @@ function selectBackground() {
 function handleBgResponse(r) {
     if (!r) return;
     if (r.error) return alert(r.error);
-    
-    // r.mode, r.path/first_path, r.data, r.count
-    
+
+    // r.mode, r.path/first_path, r.data, r.count, r.dpi
+
+    if (r.dpi) setBgDpi(r.dpi);
+
     if (r.mode === 'single') {
         currentImagePath = r.path;
         document.getElementById('imgName').innerText = r.path.split(/[\\/]/).pop(); // Только имя файла
@@ -201,7 +298,7 @@ const inpLocalSize = document.getElementById('localSize');
 
 // === INIT ===
 window.addEventListener('pywebviewready', () => {
-    // Добавь 'hvar', 'wvar' и 'distort' в список
+    initPatchContextMenu();
     ['size', 'cvar', 'shake', 'opacity', 'blur', 'slant', 'kern', 'hvar', 'wvar', 'distort'].forEach(id => dualSlide(id, true));
     
     setTimeout(() => {
@@ -209,6 +306,12 @@ window.addEventListener('pywebviewready', () => {
             availableFonts = f;
             updateGlobalFontSelect();
             updateLocalFontSelect();
+        }).catch(()=>{});
+
+        // Метрики нужны, чтобы посчитать, какой кегль реально вытянет зона
+        window.pywebview.api.get_font_metrics().then(m => {
+            fontMetrics = m || {};
+            dualSlide('size', true);
         }).catch(()=>{});
     }, 1000);
 });
@@ -238,7 +341,108 @@ function dualSlide(prefix, skipUpdateGlobal = false) {
     fill.style.width = (rightPercent - leftPercent) + '%';
     disp.innerText = `${minVal} - ${maxVal}`;
 
+    if (prefix === 'size') updateSizeHint(minVal, maxVal);
+
     if (!skipUpdateGlobal) updateGlobals();
+}
+
+// Размер шрифта задаётся в пикселях фона, поэтому одно и то же число даёт
+// разный почерк на разных бланках: 18px на скане 96 dpi — это 4.8 мм (норма),
+// а на бланке 300 dpi — уже 1.5 мм, штрих тоньше пикселя и текста просто не видно.
+// Поэтому показываем реальную высоту в миллиметрах и предупреждаем о мелком.
+let bgDpi = 96;
+
+function setBgDpi(dpi) {
+    bgDpi = dpi || 96;
+    const el = document.getElementById('bgDpiInfo');
+    if (el) el.innerText = `Фон: ${Math.round(bgDpi)} dpi`;
+    dualSlide('size', true);
+}
+
+// Генератор ужимает шрифт, пока строка не влезет в высоту зоны, поэтому слишком
+// низкая зона молча срезает размер — ползунок при этом выглядит нерабочим.
+// Отношение высоты строки к кеглю у шрифтов разное (от 1.0 до 1.98), поэтому
+// метрики берём из бэкенда и считаем по худшему из реально включённых шрифтов.
+let fontMetrics = {};
+
+function activeLineRatio() {
+    const names = Object.keys(fontMetrics);
+    if (!names.length) return 2.0;   // метрики ещё не пришли — берём худший случай
+
+    // Выбран конкретный шрифт — считаем строго по нему
+    const chosen = globalSettings.font;
+    if (chosen && chosen !== 'random' && chosen !== 'random_per_doc' && fontMetrics[chosen]) {
+        return fontMetrics[chosen];
+    }
+
+    const cfg = globalSettings.fonts_config || {};
+    const weighted = names.filter(n => cfg[n] > 0);
+    const pool = weighted.length ? weighted : names;
+
+    return Math.max(...pool.map(n => fontMetrics[n] || 2.0));
+}
+
+function neededZoneHeight(fontSize) {
+    return Math.ceil(fontSize * activeLineRatio());
+}
+
+function shortZones(fontSize) {
+    const need = neededZoneHeight(fontSize);
+    return zones.filter(z => parseInt(z.element.style.height) < need);
+}
+
+function updateSizeHint(minVal, maxVal) {
+    const hint = document.getElementById('sizeHint');
+    if (!hint) return;
+    const mm = v => (v / bgDpi * 25.4);
+    const lo = mm(minVal), hi = mm(maxVal);
+
+    let msg = `≈ ${lo.toFixed(1)}–${hi.toFixed(1)} мм на бумаге`;
+    let color = '#2e7d32';
+
+    // Ниже ~3 мм сплошного ядра штриха не остаётся, остаётся одно сглаживание
+    if (hi < 3.0) {
+        color = '#c62828';
+        msg += ' — слишком мелко, почерк будет бледным';
+    } else if (hi > 8.0) {
+        color = '#c62828';
+        msg += ' — слишком крупно';
+    }
+
+    const short = shortZones(maxVal);
+    const btn = document.getElementById('btnFitZones');
+    if (short.length) {
+        color = '#c62828';
+        msg += ` · ${short.length} зон(ы) ниже ${neededZoneHeight(maxVal)} px — размер в них ужмётся`;
+        if (btn) btn.style.display = 'block';
+    } else if (btn) {
+        btn.style.display = 'none';
+    }
+
+    hint.style.color = color;
+    hint.innerText = msg;
+}
+
+// Растит низкие зоны до высоты, при которой запрошенный кегль реально применится.
+// Растим симметрично от центра: генератор центрирует текст в зоне по вертикали,
+// поэтому надпись останется на том же месте.
+function fitZoneHeights() {
+    const maxVal = parseFloat(document.getElementById('sizeMax').value);
+    const need = neededZoneHeight(maxVal);
+    const short = shortZones(maxVal);
+    if (!short.length) return;
+
+    short.forEach(z => {
+        const el = z.element;
+        const h = parseInt(el.style.height);
+        const top = parseInt(el.style.top);
+        el.style.height = need + 'px';
+        el.style.top = Math.max(0, Math.round(top - (need - h) / 2)) + 'px';
+    });
+
+    dualSlide('size', true);
+    updateGlobals();
+    alert(`Высота увеличена у ${short.length} зон(ы) до ${need} px.`);
 }
 
 function getRangeValues(prefix) {
@@ -269,41 +473,46 @@ function resetZoom() {
 
 // === 3. CANVAS INTERACTIONS (The Fix) ===
 
-// Глобальный слушатель движения мыши (для Pan и Drawing)
+// Глобальный слушатель движения мыши (для Pan, Drawing и Paint)
 window.addEventListener('mousemove', (e) => {
-    // A. Pan Logic
+    // A. Pan
     if (isPanning) {
         panX = e.clientX - startPanX;
         panY = e.clientY - startPanY;
         updateTransform();
         return;
     }
-    
-    // B. Drawing Logic
+
+    const rect = wrapper.getBoundingClientRect();
+    const realX = (e.clientX - rect.left) / scale;
+    const realY = (e.clientY - rect.top)  / scale;
+
+    // B. Zone drawing
     if (isDrawing && tempZone) {
-        const rect = wrapper.getBoundingClientRect(); 
-        // Координаты мыши внутри scale-нутого элемента
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-        
-        // В реальные координаты картинки
-        const realX = mouseX / scale;
-        const realY = mouseY / scale;
-        
         const w = Math.abs(realX - startDrawX);
         const h = Math.abs(realY - startDrawY);
-        const x = realX < startDrawX ? realX : startDrawX;
-        const y = realY < startDrawY ? realY : startDrawY;
-
-        tempZone.style.width = w + 'px';
+        tempZone.style.width  = w + 'px';
         tempZone.style.height = h + 'px';
-        tempZone.style.left = x + 'px';
-        tempZone.style.top = y + 'px';
+        tempZone.style.left   = (realX < startDrawX ? realX : startDrawX) + 'px';
+        tempZone.style.top    = (realY < startDrawY ? realY : startDrawY) + 'px';
+    }
+
+    // C. Paint patch drawing
+    if (isPaintDrawing && tempPatch) {
+        const w = Math.abs(realX - paintStartX);
+        const h = Math.abs(realY - paintStartY);
+        tempPatch.style.width  = w + 'px';
+        tempPatch.style.height = h + 'px';
+        tempPatch.style.left   = (realX < paintStartX ? realX : paintStartX) + 'px';
+        tempPatch.style.top    = (realY < paintStartY ? realY : paintStartY) + 'px';
     }
 });
 
 window.addEventListener('mouseup', () => {
-    if (isPanning) { isPanning = false; workspace.style.cursor = 'default'; }
+    if (isPanning) {
+        isPanning = false;
+        workspace.style.cursor = currentTool === 'eyedrop' ? 'crosshair' : 'default';
+    }
     if (isDrawing) {
         isDrawing = false;
         if (tempZone) {
@@ -313,15 +522,28 @@ window.addEventListener('mouseup', () => {
             tempZone = null;
         }
     }
+    if (isPaintDrawing) {
+        isPaintDrawing = false;
+        if (tempPatch) {
+            const w = parseInt(tempPatch.style.width)  || 0;
+            const h = parseInt(tempPatch.style.height) || 0;
+            if (w > 5 && h > 5) {
+                registerPaintPatch(tempPatch);
+            } else {
+                tempPatch.remove();
+            }
+            tempPatch = null;
+        }
+    }
 });
 
 // ГЛАВНЫЙ ОБРАБОТЧИК КЛИКОВ
-// Вешаем на workspace, чтобы ловить всё, но фильтруем
 workspace.addEventListener('mousedown', (e) => {
-    // 1. Если клик по тулбару - игнор
+    // 1. Игнор служебных элементов
     if (e.target.closest('#floatingToolbar')) return;
-    
-    // 2. Если Средняя кнопка или Пробел+Клик -> PAN
+    if (e.target.closest('#toolPanel')) return;
+
+    // 2. Pan — средняя кнопка или Alt+ЛКМ
     if (e.button === 1 || (e.button === 0 && e.altKey)) {
         isPanning = true;
         startPanX = e.clientX - panX;
@@ -331,27 +553,46 @@ workspace.addEventListener('mousedown', (e) => {
         return;
     }
 
-    // 3. Если клик по Зоне или её ручке -> Пусть зона сама разбирается (она имеет свой listener)
-    if (e.target.closest('.zone') || e.target.closest('.resize-handle')) {
-        return; 
-    }
+    // 3. Зоны — пусть обрабатывают сами
+    if (e.target.closest('.zone') || e.target.closest('.resize-handle')) return;
 
-    // 4. Если Левая кнопка и есть картинка -> DRAW
-    if (e.button === 0 && document.getElementById('docImage').src) {
+    // Только ЛКМ дальше
+    if (e.button !== 0) return;
+    const imgEl = document.getElementById('docImage');
+    if (!imgEl.src || imgEl.src === window.location.href) return;
+
+    const rect = wrapper.getBoundingClientRect();
+    const imgX = (e.clientX - rect.left) / scale;
+    const imgY = (e.clientY - rect.top)  / scale;
+
+    if (currentTool === 'eyedrop') {
+        sampleColorAt(e);
+        e.preventDefault();
+    } else if (currentTool === 'paint') {
+        // patch сам перехватывает клики через stopPropagation
+        // Начало рисования patch
+        isPaintDrawing = true;
+        paintStartX = imgX;
+        paintStartY = imgY;
+        tempPatch = document.createElement('div');
+        tempPatch.className = 'paint-patch';
+        tempPatch.style.left   = imgX + 'px';
+        tempPatch.style.top    = imgY + 'px';
+        tempPatch.style.width  = '0px';
+        tempPatch.style.height = '0px';
+        tempPatch.style.background = currentPaintColor;
+        wrapper.appendChild(tempPatch);
+        e.preventDefault();
+    } else {
+        // zone tool — рисуем зону
         deselectZone();
         isDrawing = true;
-        
-        const rect = wrapper.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-        
-        startDrawX = mouseX / scale;
-        startDrawY = mouseY / scale;
-        
+        startDrawX = imgX;
+        startDrawY = imgY;
         tempZone = document.createElement('div');
         tempZone.className = 'zone';
         tempZone.style.left = startDrawX + 'px';
-        tempZone.style.top = startDrawY + 'px';
+        tempZone.style.top  = startDrawY + 'px';
         wrapper.appendChild(tempZone);
         e.preventDefault();
     }
@@ -555,6 +796,104 @@ function duplicateActiveZone() {
     createZone(newEl, newSettings);
 }
 
+// === PAINT PATCHES ===
+let activePatchEl = null;
+
+function registerPaintPatch(el) {
+    const data = {
+        el,
+        x: parseFloat(el.style.left),
+        y: parseFloat(el.style.top),
+        w: parseFloat(el.style.width),
+        h: parseFloat(el.style.height),
+        color: currentPaintColor
+    };
+    paintPatches.push(data);
+
+    // Drag
+    el.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        e.stopPropagation();
+
+        const d = paintPatches.find(p => p.el === el);
+        const startLeft = parseFloat(el.style.left);
+        const startTop  = parseFloat(el.style.top);
+        const mouseStartX = e.clientX;
+        const mouseStartY = e.clientY;
+
+        const move = (ev) => {
+            const dx = (ev.clientX - mouseStartX) / scale;
+            const dy = (ev.clientY - mouseStartY) / scale;
+            const nx = startLeft + dx;
+            const ny = startTop  + dy;
+            el.style.left = nx + 'px';
+            el.style.top  = ny + 'px';
+            if (d) { d.x = nx; d.y = ny; }
+        };
+        const stop = () => {
+            window.removeEventListener('mousemove', move);
+            window.removeEventListener('mouseup',   stop);
+        };
+        window.addEventListener('mousemove', move);
+        window.addEventListener('mouseup',   stop);
+    });
+
+    // ПКМ — контекстное меню
+    el.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        activePatchEl = el;
+        const menu = document.getElementById('patchContextMenu');
+        menu.style.display = 'block';
+        menu.style.left = e.clientX + 'px';
+        menu.style.top  = e.clientY + 'px';
+    });
+}
+
+function deletePaintPatch(el) {
+    const idx = paintPatches.findIndex(p => p.el === el);
+    if (idx > -1) { paintPatches.splice(idx, 1); }
+    el.remove();
+}
+
+function initPatchContextMenu() {
+    document.getElementById('ctxPatchDelete').onclick = () => {
+        if (activePatchEl) deletePaintPatch(activePatchEl);
+        activePatchEl = null;
+        document.getElementById('patchContextMenu').style.display = 'none';
+    };
+    document.addEventListener('click', () => {
+        document.getElementById('patchContextMenu').style.display = 'none';
+    });
+    document.addEventListener('contextmenu', () => {
+        // Закрываем если ПКМ не на patch (patch сам откроет)
+        document.getElementById('patchContextMenu').style.display = 'none';
+    });
+}
+
+function clearAllPatches() {
+    paintPatches.forEach(p => p.el.remove());
+    paintPatches = [];
+}
+
+function loadPatchesUI(list) {
+    clearAllPatches();
+    const savedColor = currentPaintColor;
+    (list || []).forEach(p => {
+        const el = document.createElement('div');
+        el.className = 'paint-patch';
+        el.style.left       = p.x + 'px';
+        el.style.top        = p.y + 'px';
+        el.style.width      = p.w + 'px';
+        el.style.height     = p.h + 'px';
+        el.style.background = p.color;
+        wrapper.appendChild(el);
+        currentPaintColor = p.color;
+        registerPaintPatch(el);
+    });
+    currentPaintColor = savedColor;
+}
+
 // === HOTKEYS ===
 document.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
@@ -567,9 +906,10 @@ document.addEventListener('keydown', (e) => {
 
 // === UI & API HELPERS ===
 function updateGlobals() {
-    globalSettings.seed = document.getElementById('projectSeed').value;
+    globalSettings.seed     = document.getElementById('projectSeed').value;
+    globalSettings.fontType = fontType;
     // 1. Простые поля
-    globalSettings.font = document.getElementById('globalFont').value;
+    globalSettings.font  = document.getElementById('globalFont').value;
     globalSettings.color = document.getElementById('globalColor').value;
     
     // 2. Двойные слайдеры (читаем через getRangeValues)
@@ -584,7 +924,12 @@ function updateGlobals() {
     globalSettings.width_variation = getRangeValues('wvar');  // Вариация ширины
     globalSettings.distortion = getRangeValues('distort');    // Деформация букв
 
-    // 3. Конфиг шрифтов (fonts_config) обновляется через модальное окно, 
+    // 3. Печать
+    globalSettings.print_dpi     = parseInt(document.getElementById('printDpi').value, 10) || 300;
+    globalSettings.output_format = document.getElementById('outputFormat').value;
+    globalSettings.output_pdf    = document.getElementById('outputPdf').checked;
+
+    // 4. Конфиг шрифтов (fonts_config) обновляется через модальное окно,
     // поэтому здесь его не трогаем, чтобы не стереть.
 }
 inpLocalCol.onchange = () => {
@@ -653,7 +998,11 @@ function getConfig() {
         width: parseInt(z.element.style.width),
         height: parseInt(z.element.style.height)
     }));
-    return JSON.stringify({ globals: globalSettings, zones: zonesConfig });
+    const patchesConfig = paintPatches.map(p => ({
+        x: p.x, y: p.y, w: p.w, h: p.h, color: p.color
+    }));
+
+    return JSON.stringify({ globals: globalSettings, zones: zonesConfig, patches: patchesConfig });
 }
 
 function startGen() {
@@ -666,30 +1015,120 @@ function stopGen() { window.pywebview.api.stop_generation().then(alert); }
 function showPreview() {
     if(zones.length === 0) return alert("Нет зон");
     window.pywebview.api.get_preview(getConfig()).then(res => {
-        if(res.data) { document.getElementById('previewImg').src = res.data; document.getElementById('previewModal').style.display = 'flex'; } 
-        else alert(res.error);
+        if(res.data) {
+            const img = document.getElementById('previewImg');
+            img.onload = () => resetPreviewZoom();
+            img.src = res.data;
+            document.getElementById('previewModal').style.display = 'flex';
+        } else alert(res.error);
     });
 }
 
+// === PREVIEW ZOOM & PAN ===
+let previewScale = 1;
+let previewPanX = 0, previewPanY = 0;
+let previewDragging = false;
+let previewDragStartX = 0, previewDragStartY = 0;
+
+function _updatePreviewTransform() {
+    const c = document.getElementById('previewPanContainer');
+    if (c) c.style.transform = `translate(${previewPanX}px, ${previewPanY}px) scale(${previewScale})`;
+    const lbl = document.getElementById('previewZoomLabel');
+    if (lbl) lbl.innerText = Math.round(previewScale * 100) + '%';
+}
+
+function resetPreviewZoom() {
+    const vp = document.getElementById('previewViewport');
+    const img = document.getElementById('previewImg');
+    if (!vp || !img.naturalWidth) return;
+    const vw = vp.clientWidth, vh = vp.clientHeight;
+    previewScale = Math.min(vw / img.naturalWidth, vh / img.naturalHeight) * 0.97;
+    previewPanX = (vw - img.naturalWidth  * previewScale) / 2;
+    previewPanY = (vh - img.naturalHeight * previewScale) / 2;
+    _updatePreviewTransform();
+}
+
+function setPreviewZoom(z) {
+    const vp = document.getElementById('previewViewport');
+    const img = document.getElementById('previewImg');
+    if (!vp || !img.naturalWidth) return;
+    previewScale = z;
+    previewPanX = (vp.clientWidth  - img.naturalWidth  * z) / 2;
+    previewPanY = (vp.clientHeight - img.naturalHeight * z) / 2;
+    _updatePreviewTransform();
+}
+
+(function initPreviewZoom() {
+    // Ждём, пока DOM будет готов
+    window.addEventListener('DOMContentLoaded', () => {
+        const vp = document.getElementById('previewViewport');
+        if (!vp) return;
+
+        // Колесо → зум относительно курсора
+        vp.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const rect = vp.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
+            const prev = previewScale;
+            const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+            previewScale = Math.max(0.05, Math.min(20, previewScale * factor));
+            previewPanX = mx - (mx - previewPanX) * (previewScale / prev);
+            previewPanY = my - (my - previewPanY) * (previewScale / prev);
+            _updatePreviewTransform();
+        }, { passive: false });
+
+        // Зажать → панорама
+        vp.addEventListener('mousedown', (e) => {
+            previewDragging = true;
+            previewDragStartX = e.clientX - previewPanX;
+            previewDragStartY = e.clientY - previewPanY;
+            vp.style.cursor = 'grabbing';
+            e.preventDefault();
+        });
+        window.addEventListener('mousemove', (e) => {
+            if (!previewDragging) return;
+            previewPanX = e.clientX - previewDragStartX;
+            previewPanY = e.clientY - previewDragStartY;
+            _updatePreviewTransform();
+        });
+        window.addEventListener('mouseup', () => {
+            if (!previewDragging) return;
+            previewDragging = false;
+            const vp2 = document.getElementById('previewViewport');
+            if (vp2) vp2.style.cursor = 'grab';
+        });
+
+        // Закрытие по клику на фон (не на вьюпорт)
+        document.getElementById('previewModal').addEventListener('mousedown', (e) => {
+            if (e.target === document.getElementById('previewModal')) closePreview();
+        });
+    });
+})();
+
 function updateProgress(c,t) { document.getElementById('progressBar').value=c; document.getElementById('progressBar').max=t; document.getElementById('progVal').innerText=`${c}/${t}`; }
 function finishGeneration(m) { alert(m); document.getElementById('progressInfo').style.display='none'; }
-function closePreview() { document.getElementById('previewModal').style.display='none'; }
+function closePreview() {
+    document.getElementById('previewModal').style.display='none';
+    previewDragging = false;
+}
 
 function saveProject() { 
     // Сначала читаем актуальное состояние интерфейса
     updateGlobals();
 
-    const data = { 
-        image: currentImagePath, 
-        excel: currentExcelPath, 
-        globals: globalSettings, // Теперь здесь полный набор
-        zones: zones.map(z => ({ 
-            x: parseFloat(z.element.style.left), 
+    const data = {
+        image: currentImagePath,
+        excel: currentExcelPath,
+        globals: globalSettings,
+        zones: zones.map(z => ({
+            x: parseFloat(z.element.style.left),
             y: parseFloat(z.element.style.top),
-            w: parseFloat(z.element.style.width), 
+            w: parseFloat(z.element.style.width),
             h: parseFloat(z.element.style.height),
-            settings: z.settings 
-        })) 
+            settings: z.settings
+        })),
+        patches: paintPatches.map(p => ({ x: p.x, y: p.y, w: p.w, h: p.h, color: p.color }))
     };
     
     // Для отладки можно глянуть в консоль (F12)
@@ -703,9 +1142,10 @@ function loadProject() {
         if(!res || res.error) return;
 
         // === 1. ОЧИСТКА ===
-        deselectZone(); 
-        zones.forEach(z => z.element.remove()); 
-        zones = []; 
+        deselectZone();
+        zones.forEach(z => z.element.remove());
+        zones = [];
+        clearAllPatches();
         resetZoom();
 
         // === 2. ЗАГРУЗКА ИСТОЧНИКОВ ===
@@ -723,9 +1163,11 @@ function loadProject() {
             
             // Если в JSON сохранился режим папки (мы пока не сохраняем явно, но путь может намекать)
             // Пока оставим простую логику:
-            currentImagePath = imgPath; 
+            currentImagePath = imgPath;
             document.getElementById('imgName').innerText = imgPath;
-            
+
+            if (typeof res.image === 'object' && res.image.dpi) setBgDpi(res.image.dpi);
+
             if (imgData) { 
                 const img = document.getElementById('docImage');
                 img.onload = () => {
@@ -745,6 +1187,11 @@ function loadProject() {
             if (g.color) document.getElementById('globalColor').value = g.color;
             if (g.seed) document.getElementById('projectSeed').value = g.seed;
             else document.getElementById('projectSeed').value = 'default';
+
+            // Настройки печати (в старых шаблонах их нет — подставляем дефолты)
+            document.getElementById('printDpi').value = g.print_dpi || 300;
+            document.getElementById('outputFormat').value = g.output_format || 'png';
+            document.getElementById('outputPdf').checked = (g.output_pdf !== false);
             
             // Б. Хелпер для двойных слайдеров
             const setDual = (prefix, val) => {
@@ -797,8 +1244,19 @@ function loadProject() {
                 globalSettings.fonts_config = {};
             }
 
-            // Д. Применяем всё в память
+            // Д. Тип шрифта
+            if (g.fontType) setFontType(g.fontType);
+
+            // Е. Применяем всё в память
             updateGlobals();
+        }
+
+        // === 4. ЗАКРАСКИ ===
+        if (res.patches) {
+            // Ждём загрузки картинки
+            const applyPatches = () => loadPatchesUI(res.patches);
+            if (document.getElementById('docImage').complete) applyPatches();
+            else document.getElementById('docImage').addEventListener('load', applyPatches, { once: true });
         }
     });
 }

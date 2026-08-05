@@ -24,6 +24,26 @@ def get_external_path(folder_name):
     
     return os.path.join(base_path, folder_name)
 
+A4_INCHES = (8.267, 11.692)
+
+def detect_dpi(path):
+    """DPI изображения: из метаданных, иначе выводим из размера как для листа A4.
+
+    Нужен и генератору (масштаб под печать), и интерфейсу (показать реальный
+    размер шрифта в миллиметрах — иначе на 300-dpi бланке дефолтные 18px
+    превращаются в 1.5 мм, и почерка попросту не видно).
+    """
+    try:
+        with Image.open(path) as im:
+            dpi = im.info.get('dpi')
+            if dpi and dpi[0] and dpi[0] > 1:
+                return float(dpi[0])
+            implied = im.size[0] / A4_INCHES[0]
+    except Exception:
+        return 96.0
+    return float(min((72, 96, 150, 200, 300, 400, 600, 1200),
+                     key=lambda d: abs(d - implied)))
+
 def image_to_base64(path):
     try:
         with open(path, "rb") as image_file:

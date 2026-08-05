@@ -5,7 +5,7 @@ import json
 import os
 import glob # Добавили для поиска файлов
 from concurrent.futures import ThreadPoolExecutor
-from core.utils import image_to_base64, pillow_to_base64
+from core.utils import image_to_base64, pillow_to_base64, detect_dpi
 from core.generator import Generator
 
 class Api:
@@ -24,6 +24,8 @@ class Api:
 
     def set_window(self, w): self._window = w
     def get_fonts_list(self): return self._gen.get_fonts()
+    def get_system_fonts_list(self): return self._gen.get_fonts('system')
+    def get_font_metrics(self): return self._gen.get_font_metrics()
 
     # === НОВЫЙ МЕТОД: ВЫБОР ПАПКИ ===
     def pick_background_folder(self):
@@ -51,6 +53,7 @@ class Api:
                 "mode": "folder",
                 "count": len(files),
                 "first_path": self.image_path,
+                "dpi": detect_dpi(self.image_path),
                 "data": image_to_base64(self.image_path) # Отдаем фронту только одну
             }
         return None
@@ -65,6 +68,7 @@ class Api:
             return {
                 "mode": "single",
                 "path": r[0],
+                "dpi": detect_dpi(r[0]),
                 "data": image_to_base64(r[0])
             }
         return None
@@ -119,7 +123,8 @@ class Api:
                         self.background_mode = 'single'
                         self.image_path = img_path
                         self.bg_list = [img_path]
-                        data['image'] = {"path": img_path, "data": image_to_base64(img_path)}
+                        data['image'] = {"path": img_path, "dpi": detect_dpi(img_path),
+                                         "data": image_to_base64(img_path)}
                     else:
                         data['image'] = {"path": img_path, "data": None}
                 return data
